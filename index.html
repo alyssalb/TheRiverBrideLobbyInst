@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>River Installation • The River Bride</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- p5.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.4/lib/p5.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #0b0d10;
+      --fg: #e8eef2;
+      --muted: #a9b7c0;
+      --accent: #a1e3a1;
+      --btn-bg: #14181d;
+      --btn-fg: #e8eef2;
+      --btn-border: #2a323b;
+      --btn-hover: #1b2127;
+      --card: #101419;
+      --card-border: #20262d;
+    }
+    html, body {
+      margin: 0; padding: 0; height: 100%;
+      background: var(--bg); color: var(--fg);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+    }
+    .wrap {
+      min-height: 100%;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+    }
+    header, footer {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--card-border);
+    }
+    footer { border-top: 1px solid var(--card-border); border-bottom: none; color: var(--muted); }
+    .title {
+      display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    }
+    .title h1 { margin: 0; font-size: clamp(20px, 3vw, 28px); letter-spacing: 0.3px; }
+    .meta {
+      display: flex; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 0.95rem;
+    }
+    .controls {
+      margin-left: auto; display: flex; gap: 10px;
+    }
+    .btn {
+      appearance: none; cursor: pointer; user-select: none;
+      padding: 10px 14px; border-radius: 10px;
+      border: 1px solid var(--btn-border);
+      background: var(--btn-bg); color: var(--btn-fg);
+      transition: background 120ms ease, transform 80ms ease;
+      font-weight: 600; letter-spacing: 0.2px;
+    }
+    .btn:hover { background: var(--btn-hover); }
+    .btn:active { transform: translateY(1px); }
+
+    .canvas-card {
+      margin: 16px 16px 24px;
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      background: linear-gradient(180deg, #0f1318, #0b0f13);
+      box-shadow: 0 10px 24px rgba(0,0,0,0.25);
+      overflow: hidden;
+    }
+    .canvas-head {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; padding: 10px 12px;
+      border-bottom: 1px solid var(--card-border);
+      color: var(--muted); font-size: 0.95rem;
+    }
+    #sketchMount {
+      position: relative;
+      width: 100%;
+      height: min(72vh, 72vw); /* attractive default aspect height */
+      outline: none;
+    }
+    .hint {
+      padding: 6px 12px 12px; color: var(--muted); font-size: 0.92rem;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="title">
+        <h1>River Installation</h1>
+        <div class="meta">
+          <span>Artist: <strong>Alyssa Barrack</strong></span>
+          <span>Play: <strong>The River Bride</strong></span>
+          <span>By: <strong>Marisela Treviño Orta</strong></span>
+        </div>
+        <div class="controls">
+          <button id="btn-fullscreen" class="btn" type="button" aria-pressed="false">Enter Full Screen</button>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="canvas-card" aria-label="Interactive river visualization">
+        <div class="canvas-head">
+          <span>Autonomous river sketch (p5.js)</span>
+          <span>Tip: use the Full Screen button for installations</span>
+        </div>
+        <div id="sketchMount" tabindex="0" role="img" aria-label="Animated river canvas"></div>
+        <div class="hint">
+          This visualization generates slow ripples and phrases on a time-based schedule.
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      © <span id="year"></span> Alyssa Barrack. Built with p5.js.
+    </footer>
+  </div>
+
+  <script>
+    // Footer year
+    document.getElementById('year').textContent = new Date().getFullYear();
+
+    /* =========================
+       River Installation (autonomous)
+       Single-file version for GitHub Pages
+       ========================= */
+
+    /* ------- TUNABLE SETTINGS ------- */
+    const RIPPLE_MIN_INTERVAL_MS = 2600;   // shortest gap between ripples
+    const RIPPLE_MAX_INTERVAL_MS = 5200;   // longest gap between ripples
+    const RIPPLE_GROUP_CHANCE   = 0.35;    // chance to spawn a small cluster
+    const RIPPLE_GROUP_SIZE_MIN = 2;
+    const RIPPLE_GROUP_SIZE_MAX = 4;
+    const RIPPLE_GROUP_SPREAD   = 28;      // px spread around a center when clustering
+
+    const RIPPLE_GROWTH_PX_PER_FRAME = 0.65; // slower = more readable
+    const RIPPLE_ALPHA_FADE_IN_MS  = 1600;   // text fade-in
+    const RIPPLE_ALPHA_HOLD_MS     = 2600;   // hold duration
+    const RIPPLE_ALPHA_FADE_OUT_MS = 2600;   // text fade-out
+
+    const RIPPLE_STROKE_ALPHA = 90;
+    const RIPPLE_TEXT_SIZE    = 16;
+    const RIVER_HALF_WIDTH    = 200;
+    /* -------------------------------- */
+
+    const PHRASE_SETTINGS = { factsWeight: 0.35, brideWeight: 0.25, recentBuffer: 6 };
+
+    const poeticLines = [
+      "The river knows.","The river remembers.","What were you before?",
+      "Floods and ebbs, you know its motion.","A name once spoken, lost downstream.",
+      "Moonlight sparkles on the calm river.","The rain disrupts, the rain brings newness.",
+      "Your hand writes circles the water won't forget.","Listen. The water tells its secrets.",
+      "Branches kiss the surface, what roots lie beneath?","The channel curves, the same as your lost thoughts.",
+      "To drift is to choose.","The water takes shape in your wondering.","The river changes in the rain."
+    ];
+
+    const riverFacts = [
+      "The water here carries worlds of sediment, stories ground to silt.",
+      "Take a gamble in the largest rainforest in the world.",
+      "These waters cross 8 continents, expansive.",
+      "So many species call these banks and waters home; new ones are always there to find, if one is brave enough to look.",
+      "Who lives here? Who knows the land? Who was born here?",
+      "The river supports 400 indigenous groups, and 300 indigenous languages.",
+      "Stop taking these trees, they are integral to the safety of the planet.",
+      "The rich canopy tells the story of the forest, and provides its temperature and humidity regulation.",
+      "The Amazon once flowed in the opposite direction, towards the Pacific, until the Andes rose and reversed it.",
+      "Sometimes even dolphin myths can die - global warming causes intensive droughts, harming the ecosystem and all creature that inhabit it."
+    ];
+
+    const brideFlavor = [
+      "Promises ebb and flow, but the river always keeps them.",
+      "Sisters hear different secrets in the same water.",
+      "A veil of steam, a choice to drift.",
+      "If a stranger rose from these waters, would you know his name?",
+      "How do you treat the dolphins? They watch; they know.",
+      "Nets catch fish, sometimes more.",
+      "The current hesistates, and the current pulls.",
+      "The floods await no one."
+    ];
+
+    let ripples = [];
+    let riverMask = [];
+    let nextRippleAt = 0;
+    const recentPhrases = [];
+
+    // Full Screen toggle
+    const btnFs = document.getElementById('btn-fullscreen');
+    btnFs.addEventListener('click', () => {
+      const isFs = fullscreen();
+      fullscreen(!isFs);
+    });
+    document.addEventListener('fullscreenchange', () => {
+      const isFs = !!document.fullscreenElement;
+      btnFs.textContent = isFs ? "Exit Full Screen" : "Enter Full Screen";
+      btnFs.setAttribute('aria-pressed', String(isFs));
+      // p5 will fire windowResized, but ensure mount focus is reasonable
+      const mount = document.getElementById('sketchMount');
+      if (mount) mount.focus({ preventScroll: true });
+    });
+
+    function getMountSize() {
+      const m = document.getElementById('sketchMount');
+      if (!m) return { w: windowWidth, h: windowHeight };
+      const r = m.getBoundingClientRect();
+      return { w: r.width, h: r.height };
+    }
+
+    function setup() {
+      const { w, h } = getMountSize();
+      const c = createCanvas(w, h);
+      const mount = document.getElementById('sketchMount');
+      if (mount) c.parent('sketchMount');
+      noStroke();
+      textFont('system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif');
+      scheduleNextRipple();
+
+      // Optional: seed a first ripple quickly so it "breathes" on load
+      setTimeout(() => {
+        if (riverMask.length > 0) {
+          const row = riverMask[int(riverMask.length/2)];
+          if (row) triggerRipple((row.left + row.right) / 2, row.y, true);
+        }
+      }, 900);
+    }
+
+    function draw() {
+      background(0);
+      drawSunsetSky();
+      drawRiver();
+      drawRiverTexture();
+      maybeSpawnRipple();
+      drawRipples();
+    }
+
+    function windowResized() {
+      const { w, h } = getMountSize();
+      resizeCanvas(w, h);
+    }
+
+    /* -------- Visual layers -------- */
+    function drawSunsetSky() {
+      for (let y = 0; y < height; y++) {
+        const inter = map(y, 0, height, 0, 1);
+        const c = lerpColor(color('#fdc57b'), color('#6b4c8b'), inter);
+        stroke(c);
+        line(0, y, width, y);
+      }
+    }
+
+    function drawRiver() {
+      fill('#2f5e4e');
+      beginShape();
+      riverMask = [];
+
+      for (let y = 0; y <= height; y += 8) {
+        const edgeEase = sin((y / height) * PI);
+        const n = noise(y * 0.01, frameCount * 0.001);
+        const waveOffset = sin(y * 0.01 + frameCount * 0.003 + n * TWO_PI) * (60 + n * 30 * edgeEase);
+        const leftX = width / 2 + waveOffset - RIVER_HALF_WIDTH;
+        vertex(leftX, y);
+        riverMask.push({ y, left: leftX });
+      }
+
+      for (let i = riverMask.length - 1; i >= 0; i--) {
+        const y = riverMask[i].y;
+        const edgeEase = sin((y / height) * PI);
+        const n = noise(y * 0.01 + 100, frameCount * 0.001 + 100);
+        const waveOffset = sin(y * 0.01 + frameCount * 0.003 + n * TWO_PI) * (60 + n * 30 * edgeEase);
+        const rightX = width / 2 + waveOffset + RIVER_HALF_WIDTH;
+        vertex(rightX, y);
+        riverMask[i].right = rightX;
+      }
+
+      endShape(CLOSE);
+    }
+
+    function drawRiverTexture() {
+      push();
+      blendMode(SOFT_LIGHT);
+
+      stroke(255, 255, 255, 12);
+      strokeWeight(1);
+      for (let y = 0; y < height; y += 6) {
+        const waviness = sin(y * 0.02 + frameCount * 0.02) * 30;
+        const left = width / 2 - RIVER_HALF_WIDTH + waviness;
+        const right = width / 2 + RIVER_HALF_WIDTH + waviness;
+        line(left, y, right, y);
+      }
+
+      noStroke();
+      for (let i = 0; i < 30; i++) {
+        const y = floor(random(height));
+        const row = getMaskRowNearY(y);
+        if (row) {
+          const x = random(row.left, row.right);
+          fill(255, 255, 255, random(20, 60));
+          ellipse(x, y, random(3, 7), random(1.5, 3));
+        }
+      }
+      pop();
+    }
+
+    /* -------- Ripple scheduling -------- */
+    function scheduleNextRipple() {
+      const gap = random(RIPPLE_MIN_INTERVAL_MS, RIPPLE_MAX_INTERVAL_MS);
+      nextRippleAt = millis() + gap;
+    }
+
+    function maybeSpawnRipple() {
+      if (millis() < nextRippleAt || riverMask.length === 0) return;
+
+      const row = riverMask[int(random(riverMask.length))];
+      if (!row || row.left === undefined || row.right === undefined) {
+        scheduleNextRipple();
+        return;
+      }
+
+      if (random() < RIPPLE_GROUP_CHANCE) {
+        const cx = random(row.left + 18, row.right - 18);
+        const cy = row.y + random(-10, 10);
+        const count = int(random(RIPPLE_GROUP_SIZE_MIN, RIPPLE_GROUP_SIZE_MAX + 1));
+        for (let i = 0; i < count; i++) {
+          const ox = cx + random(-RIPPLE_GROUP_SPREAD, RIPPLE_GROUP_SPREAD);
+          const oy = cy + random(-RIPPLE_GROUP_SPREAD, RIPPLE_GROUP_SPREAD);
+          const clamped = clampToRiver(ox, oy);
+          triggerRipple(clamped.x, clamped.y, i === 0);
+        }
+      } else {
+        const x = random(row.left + 18, row.right - 18);
+        triggerRipple(x, row.y, true);
+      }
+      scheduleNextRipple();
+    }
+
+    function triggerRipple(x, y, withText) {
+      ripples.push({
+        x, y,
+        radius: 10,
+        wobbleOffset: random(TWO_PI),
+        variation: {
+          freq: random(2, 5.2),
+          amp: random(1.5, 4.5),
+          speed: random(0.04, 0.10)
+        },
+        bornAt: millis(),
+        phase: "fadeIn",
+        alpha: 0,
+        phrase: withText ? pickPhrase() : null
+      });
+    }
+
+    function drawRipples() {
+      noFill();
+      stroke(255, 255, 255, RIPPLE_STROKE_ALPHA);
+      strokeWeight(1.2);
+
+      const now = millis();
+
+      for (let r of ripples) {
+        const constrained = clampToRiver(r.x, r.y);
+        r.x = constrained.x; r.y = constrained.y;
+
+        push();
+        translate(r.x, r.y);
+        rotate(sin(frameCount * 0.03 + r.wobbleOffset) * 0.06);
+
+        const pts = [];
+        const v = r.variation;
+        for (let a = 0; a < TWO_PI; a += PI / 32) {
+          const wobble = sin(a * v.freq + frameCount * v.speed + r.wobbleOffset) * v.amp;
+          const rx = cos(a) * (r.radius + wobble);
+          const ry = sin(a) * (r.radius + wobble * 0.6);
+          pts.push({ x: rx, y: ry });
+        }
+        beginShape();
+        for (let p of pts) curveVertex(p.x, p.y);
+        for (let i = 0; i < 3; i++) curveVertex(pts[i].x, pts[i].y);
+        endShape();
+        pop();
+
+        if (r.phrase) {
+          const t = now - r.bornAt;
+          if (r.phase === "fadeIn") {
+            r.alpha = map(constrain(t, 0, RIPPLE_ALPHA_FADE_IN_MS), 0, RIPPLE_ALPHA_FADE_IN_MS, 0, 255);
+            if (t >= RIPPLE_ALPHA_FADE_IN_MS) { r.phase = "hold"; r.holdStart = now; r.alpha = 255; }
+          } else if (r.phase === "hold") {
+            r.alpha = 245;
+            if (now - r.holdStart >= RIPPLE_ALPHA_HOLD_MS) { r.phase = "fadeOut"; r.fadeOutStart = now; }
+          } else if (r.phase === "fadeOut") {
+            const ft = now - r.fadeOutStart;
+            r.alpha = map(constrain(ft, 0, RIPPLE_ALPHA_FADE_OUT_MS), 0, RIPPLE_ALPHA_FADE_OUT_MS, 245, 0);
+          }
+
+          if (r.alpha > 1) {
+            push();
+            fill(255, r.alpha);
+            noStroke();
+            textAlign(CENTER);
+            textSize(RIPPLE_TEXT_SIZE);
+            text(r.phrase, r.x, r.y - r.radius - 14);
+            pop();
+          }
+        }
+
+        r.radius += RIPPLE_GROWTH_PX_PER_FRAME;
+      }
+
+      ripples = ripples.filter(r => {
+        if (!r.phrase) return r.radius < Math.max(width, height) * 0.8;
+        return !(r.phase === "fadeOut" && r.alpha <= 1);
+      });
+    }
+
+    /* -------- Utilities -------- */
+    function getMaskRowNearY(y) {
+      if (riverMask.length === 0) return null;
+      let best = riverMask[0], bestD = Math.abs(y - best.y);
+      for (let i = 1; i < riverMask.length; i++) {
+        const d = Math.abs(y - riverMask[i].y);
+        if (d < bestD) { best = riverMask[i]; bestD = d; }
+      }
+      if (best.left === undefined || best.right === undefined) return null;
+      return best;
+    }
+
+    function clampToRiver(x, y) {
+      const row = getMaskRowNearY(y);
+      if (!row) return { x, y };
+      const clampedX = constrain(x, row.left + 8, row.right - 8);
+      return { x: clampedX, y: row.y };
+    }
+
+    function pickPhrase() {
+      const r = Math.random();
+      let pool;
+      if (r < PHRASE_SETTINGS.factsWeight) pool = riverFacts;
+      else if (r < PHRASE_SETTINGS.factsWeight + PHRASE_SETTINGS.brideWeight) pool = brideFlavor;
+      else pool = poeticLines;
+
+      let choice = null;
+      for (let i = 0; i < 8; i++) {
+        const candidate = pool[Math.floor(Math.random() * pool.length)];
+        if (!recentPhrases.includes(candidate)) { choice = candidate; break; }
+        choice = candidate;
+      }
+      recentPhrases.push(choice);
+      while (recentPhrases.length > PHRASE_SETTINGS.recentBuffer) recentPhrases.shift();
+      return choice;
+    }
+  </script>
+</body>
+</html>
