@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <!-- p5.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/p5@1.9.4/lib/p5.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,600;1,400;1,600&display=swap" rel="stylesheet">
 
   <style>
     :root {
@@ -73,7 +74,7 @@
     #sketchMount {
       position: relative;
       width: 100%;
-      height: min(72vh, 72vw); /* attractive default aspect height */
+      height: min(72vh, 72vw); 
       outline: none;
     }
     #sketchMount:fullscreen {
@@ -82,6 +83,11 @@
       margin: 0;
       border-radius: 0;
     }
+    #sketchMount {
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
 
     .hint {
       padding: 6px 12px 12px; color: var(--muted); font-size: 0.92rem;
@@ -149,6 +155,21 @@
     const RIPPLE_STROKE_ALPHA = 90;
     const RIPPLE_TEXT_SIZE    = 16;
     const RIVER_HALF_WIDTH    = 200;
+
+    /* ---------- Text styling & motion ---------- */
+const FONT_FAMILY = 'Spectral, serif'; 
+const TEXT_WEIGHT = 600;              
+const TEXT_ITALIC = true;              
+
+// Character motion parameters
+const TEXT_WAVE_AMPLITUDE = 6;         // px vertical/lateral wobble
+const TEXT_WAVE_SPEED     = 0.05;      // animation speed
+const TEXT_SCATTER_IN     = 0.5;       // outward drift strength during fade-in
+const TEXT_SCATTER_HOLD   = 0.8;       // during hold
+const TEXT_SCATTER_OUT    = 1.6;       // during fade-out (more breakup)
+const TEXT_CHAR_SPREAD    = 0.9;       // lateral spread along the line (0..1.5)
+const TEXT_ROTATION_MAX   = 0.04;      // max per-char rotation (radians)
+
     /* -------------------------------- */
 
     const PHRASE_SETTINGS = { factsWeight: 0.35, brideWeight: 0.25, recentBuffer: 6 };
@@ -226,7 +247,10 @@
       const mount = document.getElementById('sketchMount');
       if (mount) c.parent('sketchMount');
       noStroke();
-      textFont('system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif');
+      textFont('FONT_FAMILY');
+      textStyle(TEXT_ITALIC ? ITALIC : NORMAL);
+      textSize(RIPPLE_TEXT_SIZE);
+      textAlign(CENTER, BASELINE);
       scheduleNextRipple();
 
       // Optional: seed a first ripple quickly so it "breathes" on load
@@ -364,6 +388,81 @@
       });
     }
 
+    function easeInOutCubic(t){ return t<0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2; }
+
+// Draws “shattering” phrase where characters drift outward (radially) and wobble like water
+function drawShatteringText(phrase, centerX, baselineY, ripple, now) {
+  if (!phrase || phrase.length === 0) return;
+
+  // Determine phase-based scatter strength
+  let scatter = TEXT_SCATTER_HOLD;
+  if (ripple.phase === 'fadeIn') {
+    const t = constrain((now - ripple.bornAt) / RIPPLE_ALPHA_FADE_IN_MS, 0, 1);
+    scatter = lerp(0, TEXT_SCATTER_IN, easeInOutCubic(t));
+  } else if (ripple.phase === 'hold') {
+    scatter = TEXT_SCATTER_HOLD;
+  } else if (ripple.phase === 'fadeOut') {
+    const t = constrain((now - ripple.fadeOutStart) / RIPPLE_ALPHA_FADE_OUT_MS, 0, 1);
+    scatter = lerp(TEXT_SCATTER_HOLD, TEXT_SCATTER_OUT, easeInOutCubic(t));
+  }
+
+  // Radial direction from ripple center to baseline point (generally upward)
+  const dx = 0;
+  const dy = -1;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len, uy = dy / len;       // outward unit vector
+  const px = -uy,   py = ux;                // perpendicular for lateral jitter
+
+  push();
+  textFont(FONT_FAMILY);
+  textStyle(TEXT_ITALIC ? ITALIC : NORMAL);
+  textSize(RIPPLE_TEXT_SIZE);
+  noStroke();
+  fill(255, ripple.alpha);
+
+  // Measure total width to center the string
+  let totalW = 0;
+  for (let i = 0; i < phrase.length; i++) totalW += textWidth(phrase[i]);
+
+  // Base left X so that text is centered at centerX
+  let cursorX = centerX - totalW / 2;
+
+  for (let i = 0; i < phrase.length; i++) {
+    const ch = phrase[i];
+    const chW = textWidth(ch);
+
+    // Fraction along the word (-1 .. +1), for symmetric lateral motion
+    const frac = phrase.length > 1 ? map(i, 0, phrase.length - 1, -1, 1) : 0;
+
+    // Time-based wobble (gentle, watery)
+    const wob = sin(frameCount * TEXT_WAVE_SPEED + i * 0.35 + ripple.wobbleOffset);
+    const wob2 = sin(frameCount * (TEXT_WAVE_SPEED * 0.7) + i * 0.57 + ripple.wobbleOffset);
+
+    // Outward drift scales with ripple radius & scatter
+    const outward = scatter * (2 + ripple.radius * 0.015);
+
+    // Perpendicular (along the line) drift for a “shear” effect
+    const lateral = TEXT_CHAR_SPREAD * frac * (2 + wob2 * TEXT_WAVE_AMPLITUDE * 0.3);
+
+    // Compose displacement vector
+    const offX = outward * ux + lateral * px + wob * (px * 0.4 + ux * 0.2);
+    const offY = outward * uy + lateral * py + wob * (py * 0.4 + uy * 0.2);
+
+    // Slight per-char rotation
+    const rot = wob * TEXT_ROTATION_MAX;
+
+    // Draw character
+    push();
+    translate(cursorX + chW / 2 + offX, baselineY + offY);
+    rotate(rot);
+    text(ch, 0, 0);
+    pop();
+
+    cursorX += chW; // advance
+  }
+  pop();
+}
+
     function drawRipples() {
       noFill();
       stroke(255, 255, 255, RIPPLE_STROKE_ALPHA);
@@ -393,29 +492,26 @@
         endShape();
         pop();
 
-        if (r.phrase) {
-          const t = now - r.bornAt;
-          if (r.phase === "fadeIn") {
-            r.alpha = map(constrain(t, 0, RIPPLE_ALPHA_FADE_IN_MS), 0, RIPPLE_ALPHA_FADE_IN_MS, 0, 255);
-            if (t >= RIPPLE_ALPHA_FADE_IN_MS) { r.phase = "hold"; r.holdStart = now; r.alpha = 255; }
-          } else if (r.phase === "hold") {
-            r.alpha = 245;
-            if (now - r.holdStart >= RIPPLE_ALPHA_HOLD_MS) { r.phase = "fadeOut"; r.fadeOutStart = now; }
-          } else if (r.phase === "fadeOut") {
-            const ft = now - r.fadeOutStart;
-            r.alpha = map(constrain(ft, 0, RIPPLE_ALPHA_FADE_OUT_MS), 0, RIPPLE_ALPHA_FADE_OUT_MS, 245, 0);
-          }
+if (r.phrase) {
+  const tNow = now; // already defined in drawRipples
+  // phase handling (unchanged from your version)
+  if (r.phase === "fadeIn") {
+    r.alpha = map(constrain(tNow - r.bornAt, 0, RIPPLE_ALPHA_FADE_IN_MS), 0, RIPPLE_ALPHA_FADE_IN_MS, 0, 255);
+    if (tNow - r.bornAt >= RIPPLE_ALPHA_FADE_IN_MS) { r.phase = "hold"; r.holdStart = tNow; r.alpha = 255; }
+  } else if (r.phase === "hold") {
+    r.alpha = 245;
+    if (tNow - r.holdStart >= RIPPLE_ALPHA_HOLD_MS) { r.phase = "fadeOut"; r.fadeOutStart = tNow; }
+  } else if (r.phase === "fadeOut") {
+    const ft = tNow - r.fadeOutStart;
+    r.alpha = map(constrain(ft, 0, RIPPLE_ALPHA_FADE_OUT_MS), 0, RIPPLE_ALPHA_FADE_OUT_MS, 245, 0);
+  }
 
-          if (r.alpha > 1) {
-            push();
-            fill(255, r.alpha);
-            noStroke();
-            textAlign(CENTER);
-            textSize(RIPPLE_TEXT_SIZE);
-            text(r.phrase, r.x, r.y - r.radius - 14);
-            pop();
-          }
-        }
+  if (r.alpha > 1) {
+    const baselineY = r.y - r.radius - 14;
+    drawShatteringText(r.phrase, r.x, baselineY, r, tNow);
+  }
+}
+
 
         r.radius += RIPPLE_GROWTH_PX_PER_FRAME;
       }
