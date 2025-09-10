@@ -142,7 +142,7 @@
     /* ------- TUNABLE SETTINGS ------- */
     const RIPPLE_MIN_INTERVAL_MS = 2600;   // shortest gap between ripples
     const RIPPLE_MAX_INTERVAL_MS = 5200;   // longest gap between ripples
-    const RIPPLE_GROUP_CHANCE   = 0.45;    // chance to spawn a small cluster
+    const RIPPLE_GROUP_CHANCE   = 0.35;    // chance to spawn a small cluster
     const RIPPLE_GROUP_SIZE_MIN = 2;
     const RIPPLE_GROUP_SIZE_MAX = 4;
     const RIPPLE_GROUP_SPREAD   = 28;      // px spread around a center when clustering
@@ -162,10 +162,10 @@ const TEXT_WEIGHT = 600;
 const TEXT_ITALIC = true;              
 
 // Character motion parameters
-const TEXT_WAVE_AMPLITUDE = 8;         // px vertical/lateral wobble
+const TEXT_WAVE_AMPLITUDE = 7;         // px vertical/lateral wobble
 const TEXT_WAVE_SPEED     = 0.05;      // animation speed
-const TEXT_SCATTER_IN     = 0.8;       // outward drift strength during fade-in
-const TEXT_SCATTER_HOLD   = 1.2;       // during hold
+const TEXT_SCATTER_IN     = 0.6;       // outward drift strength during fade-in
+const TEXT_SCATTER_HOLD   = 0.9;       // during hold
 const TEXT_SCATTER_OUT    = 1.9;       // during fade-out (more breakup)
 const TEXT_CHAR_SPREAD    = 0.9;       // lateral spread along the line (0..1.5)
 const TEXT_ROTATION_MAX   = 0.06;      // max per-char rotation (radians)
